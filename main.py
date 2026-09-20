@@ -1,29 +1,29 @@
-"""
-Stress Scouter - Backend API
-โหลด model.pkl (จาก train.py) มาเสิร์ฟ endpoint POST /predict
-รัน local: uvicorn main:app --reload
-Deploy: Render / Railway (ดู requirements.txt คู่กัน)
-"""
-
 import joblib
 import numpy as np
 import pandas as pd
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
-app = FastAPI(title="Stress Scouter API")
+from database import engine, get_db, Base
+import models
+from schemas import PredictRequest, PredictResponse
 
-# อนุญาตให้หน้าเว็บ (ไม่ว่าจะโฮสต์ที่ไหน เช่น Google Sites) เรียก API นี้ได้
+# สร้างตารางในฐานข้อมูลอัตโนมัติ (ถ้ายังไม่มี) ตอนแอปเริ่มทำงาน
+Base.metadata.create_all(bind=engine)
+
+app = FastAPI()
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],          # โปรดักชันจริงแนะนำระบุโดเมนเว็บของคุณแทน "*"
-    allow_methods=["POST"],
+    allow_origins=["*"],  # โปรดักชันจริงควรระบุ origin ของหน้าเว็บให้ชัดเจน
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
-ARTIFACT_PATH = "model.pkl"
-artifact = joblib.load(ARTIFACT_PATH)
+# โหลด "artifact" ที่ train.py เซฟไว้ (เป็น dict ห่อโมเดล + ข้อมูลสำหรับคำนวณ index)
+# ห้ามใช้ pickle.load ตรงๆ เพราะโมเดลถูกเซฟด้วย joblib.dump
+artifact = joblib.load("model.pkl")
 
 MODEL = artifact["model"]
 FEATURE_ORDER = artifact["feature_order"]
@@ -35,7 +35,6 @@ COL_STDS = artifact["index_col_stds"]
 RAW_MIN = artifact["raw_index_min"]
 RAW_MAX = artifact["raw_index_max"]
 
-# ข้อความ + สีประจำแต่ละระดับ (แก้ข้อความให้เข้ากับโทนเว็บได้ตามต้องการ)
 LEVEL_INFO = {
     "low": {
         "th": "ความเครียดต่ำ",
@@ -60,38 +59,13 @@ LEVEL_INFO = {
 }
 
 
-class StressInput(BaseModel):
-    anxiety_level: float
-    self_esteem: float
-    mental_health_history: float
-    depression: float
-    headache: float
-    blood_pressure: float
-    sleep_quality: float
-    breathing_problem: float
-    noise_level: float
-    living_conditions: float
-    safety: float
-    basic_needs: float
-    academic_performance: float
-    study_load: float
-    teacher_student_relationship: float
-    future_career_concerns: float
-    social_support: float
-    peer_pressure: float
-    extracurricular_activities: float
-    bullying: float
-
-
 def compute_stress_index(payload: dict) -> float:
     """คำนวณ stress_index (0-100) ด้วยสูตรเดียวกับตอนเทรน (z-score POS - NEG)"""
     total = 0.0
     for col in POS_COLS:
-        z = (payload[col] - COL_MEANS[col]) / COL_STDS[col]
-        total += z
+        total += (payload[col] - COL_MEANS[col]) / COL_STDS[col]
     for col in NEG_COLS:
-        z = (payload[col] - COL_MEANS[col]) / COL_STDS[col]
-        total -= z
+        total -= (payload[col] - COL_MEANS[col]) / COL_STDS[col]
     scaled = (total - RAW_MIN) / (RAW_MAX - RAW_MIN) * 100
     return float(np.clip(scaled, 0, 100))
 
@@ -101,34 +75,34 @@ def health_check():
     return {"status": "ok", "message": "Stress Scouter API is running"}
 
 
-@app.post("/predict")
-def predict(data: StressInput):
-    payload = data.dict()
-
-    missing = [c for c in FEATURE_ORDER if c not in payload]
-    if missing:
-        raise HTTPException(status_code=400, detail=f"ขาดฟีเจอร์: {missing}")
+@app.post("/predict", response_model=PredictResponse)
+def predict(payload: PredictRequest, db: Session = Depends(get_db)):
+    data = payload.dict()
 
     # เรียงคอลัมน์ให้ตรงกับตอนเทรนเป๊ะๆ ก่อนส่งเข้าโมเดล
-    row = pd.DataFrame([[payload[c] for c in FEATURE_ORDER]], columns=FEATURE_ORDER)
-
+    row = pd.DataFrame([[data[c] for c in FEATURE_ORDER]], columns=FEATURE_ORDER)
     pred_class = int(MODEL.predict(row)[0])
-    label_en = LABELS[pred_class]
-    info = LEVEL_INFO[label_en]
+    level_key = LABELS[pred_class]
+    info = LEVEL_INFO[level_key]
 
-    score = compute_stress_index(payload)
+    score = round(compute_stress_index(data))  # 0-100 แบบละเอียด เก็บลง DB (ไม่ส่งกลับให้ผู้ใช้เห็น)
 
-    # ความน่าจะเป็นของแต่ละระดับ (ถ้าโมเดลรองรับ predict_proba)
-    proba = None
-    if hasattr(MODEL, "predict_proba"):
-        proba_arr = MODEL.predict_proba(row)[0]
-        proba = {LABELS[i]: round(float(p), 3) for i, p in enumerate(proba_arr)}
+    # บันทึกผลลง database ก่อน ยังไม่ตั้ง respondent_code (ต้องรู้ id ที่ database gen ให้ก่อน)
+    result = models.StressResult(
+        respondent_code="",   # ใส่ชั่วคราว จะอัปเดตด้านล่างหลังรู้ id จริง
+        score=score,
+        level=level_key,
+    )
+    db.add(result)
+    db.flush()  # ให้ database gen id มาก่อน โดยยังไม่ commit
 
-    return {
-        "label": info["th"],
-        "level_key": label_en,
-        "color": info["color"],
-        "description": info["description"],
-        "score": round(score, 1),
-        "probabilities": proba,
-    }
+    result.respondent_code = f"{result.id:05d}"  # คนแรก 00001, คนสอง 00002, ...
+    db.commit()
+
+    # ส่งกลับให้หน้าเว็บ - ไม่มี score ติดไปด้วย บอกแค่ระดับ
+    return PredictResponse(
+        label=info["th"],
+        level_key=level_key,
+        color=info["color"],
+        description=info["description"],
+    )

@@ -21,19 +21,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# โหลด "artifact" ที่ train.py เซฟไว้ (เป็น dict ห่อโมเดล + ข้อมูลสำหรับคำนวณ index)
-# ห้ามใช้ pickle.load ตรงๆ เพราะโมเดลถูกเซฟด้วย joblib.dump
+# โหลดไฟล์ที่เทรนไว้ (model.pkl) — เป็น dict ที่เซฟด้วย joblib จาก train.py
+# ข้างในมี: model, feature_order, labels, พารามิเตอร์ของ index, index_cuts (เกณฑ์ SPST-20)
 artifact = joblib.load("model.pkl")
 
-MODEL = artifact["model"]
-FEATURE_ORDER = artifact["feature_order"]
-LABELS = artifact["labels"]                 # {0:"low",1:"medium",2:"high",3:"highest"}
+FEATURE_ORDER = artifact["feature_order"]          # ลำดับคอลัมน์ตอนเทรน
 POS_COLS = artifact["index_pos_cols"]
 NEG_COLS = artifact["index_neg_cols"]
-COL_MEANS = artifact["index_col_means"]
-COL_STDS = artifact["index_col_stds"]
+INDEX_COLS = POS_COLS + NEG_COLS
+COL_MEANS = pd.Series(artifact["index_col_means"])
+COL_STDS = pd.Series(artifact["index_col_stds"])
 RAW_MIN = artifact["raw_index_min"]
 RAW_MAX = artifact["raw_index_max"]
+CUTS = artifact["index_cuts"]                       # cut-off ตามเกณฑ์ SPST-20 บน index 0-100
 
 LEVEL_INFO = {
     "low": {
@@ -57,17 +57,15 @@ LEVEL_INFO = {
         "description": "ความเครียดอยู่ในระดับสูงมาก แนะนำให้ปรึกษาผู้เชี่ยวชาญด้านสุขภาพจิตโดยเร็ว",
     },
 }
+LABELS = artifact["labels"]  # {0:"low",1:"medium",2:"high",3:"highest"}
 
 
-def compute_stress_index(payload: dict) -> float:
-    """คำนวณ stress_index (0-100) ด้วยสูตรเดียวกับตอนเทรน (z-score POS - NEG)"""
-    total = 0.0
-    for col in POS_COLS:
-        total += (payload[col] - COL_MEANS[col]) / COL_STDS[col]
-    for col in NEG_COLS:
-        total -= (payload[col] - COL_MEANS[col]) / COL_STDS[col]
-    scaled = (total - RAW_MIN) / (RAW_MAX - RAW_MIN) * 100
-    return float(np.clip(scaled, 0, 100))
+def compute_stress_index(row: pd.DataFrame) -> float:
+    """z-score ทุก feature -> composite index -> ปรับสเกล 0-100"""
+    z = (row[INDEX_COLS] - COL_MEANS) / COL_STDS
+    raw = z[POS_COLS].sum(axis=1) - z[NEG_COLS].sum(axis=1)
+    idx = (raw - RAW_MIN) / (RAW_MAX - RAW_MIN) * 100
+    return float(idx.clip(0, 100).iloc[0])
 
 
 @app.get("/")
@@ -77,19 +75,22 @@ def health_check():
 
 @app.post("/predict", response_model=PredictResponse)
 def predict(payload: PredictRequest, db: Session = Depends(get_db)):
-    data = payload.dict()
+    # 1) เตรียม features ตามลำดับที่โมเดลต้องการ
+    row = pd.DataFrame([{name: getattr(payload, name) for name in FEATURE_ORDER}])
 
-    # เรียงคอลัมน์ให้ตรงกับตอนเทรนเป๊ะๆ ก่อนส่งเข้าโมเดล
-    row = pd.DataFrame([[data[c] for c in FEATURE_ORDER]], columns=FEATURE_ORDER)
-    pred_class = int(MODEL.predict(row)[0])
-    level_key = LABELS[pred_class]
+    # 2) คำนวณ composite index แล้วแบ่ง 4 ระดับด้วย cut-off ตามเกณฑ์ SPST-20
+    stress_index = compute_stress_index(row)
+    level_code = int(np.searchsorted(CUTS, stress_index, side="right"))  # 0-3
+    level_key = LABELS[level_code]
     info = LEVEL_INFO[level_key]
+    score = int(round(stress_index))  # 0-100 เก็บลง DB เท่านั้น ไม่ส่งกลับให้ผู้ใช้เห็น
 
-    score = round(compute_stress_index(data))  # 0-100 แบบละเอียด เก็บลง DB (ไม่ส่งกลับให้ผู้ใช้เห็น)
+    # (ทางเลือก) ผลโมเดล 3 ระดับจาก label เดิม ไว้เทียบ/ดีบัก ไม่ได้ใช้กำหนดระดับที่แสดงผล
+    # model_level = int(artifact["model"].predict(row)[0])
 
-    # บันทึกผลลง database ก่อน ยังไม่ตั้ง respondent_code (ต้องรู้ id ที่ database gen ให้ก่อน)
+    # 3) บันทึกผลลง database — ไม่เก็บชื่อ/รหัสนิสิต/คณะ ใช้ respondent_code แทน
     result = models.StressResult(
-        respondent_code="",   # ใส่ชั่วคราว จะอัปเดตด้านล่างหลังรู้ id จริง
+        respondent_code="",  # ใส่ชั่วคราว จะอัปเดตด้านล่างหลังรู้ id จริง
         score=score,
         level=level_key,
     )
@@ -99,7 +100,7 @@ def predict(payload: PredictRequest, db: Session = Depends(get_db)):
     result.respondent_code = f"{result.id:05d}"  # คนแรก 00001, คนสอง 00002, ...
     db.commit()
 
-    # ส่งกลับให้หน้าเว็บ - ไม่มี score ติดไปด้วย บอกแค่ระดับ
+    # 4) ส่งกลับให้หน้าเว็บ — ไม่มี score ติดไปด้วย บอกแค่ระดับ
     return PredictResponse(
         label=info["th"],
         level_key=level_key,

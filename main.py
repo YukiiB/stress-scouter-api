@@ -21,19 +21,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# โหลดไฟล์ที่เทรนไว้ (model.pkl) — เป็น dict ที่เซฟด้วย joblib จาก train.py
-# ข้างในมี: model, feature_order, labels, พารามิเตอร์ของ index, index_cuts (เกณฑ์ SPST-20)
+# โหลดไฟล์ที่เทรนไว้ (model.pkl) จาก train_ml_composite.py
 artifact = joblib.load("model.pkl")
 
-FEATURE_ORDER = artifact["feature_order"]          # ลำดับคอลัมน์ตอนเทรน
+MODEL = artifact["model"]
+FEATURE_ORDER = artifact["feature_order"]
+LABELS = artifact["labels"]  # {0:"low",1:"medium",2:"high",3:"highest"}
+
+# พารามิเตอร์คำนวณ ml_score จาก predict_proba (ใช้ตัดสินระดับ)
+MU_LOW, SD_LOW = artifact["ml_mu_low"], artifact["ml_sd_low"]
+MU_HIGH, SD_HIGH = artifact["ml_mu_high"], artifact["ml_sd_high"]
+CUTS = artifact["ml_cuts"]
+
+# พารามิเตอร์ raw-feature z-score (ใช้แค่หา top_factors อธิบายเหตุผล)
 POS_COLS = artifact["index_pos_cols"]
 NEG_COLS = artifact["index_neg_cols"]
-INDEX_COLS = POS_COLS + NEG_COLS
-COL_MEANS = pd.Series(artifact["index_col_means"])
-COL_STDS = pd.Series(artifact["index_col_stds"])
-RAW_MIN = artifact["raw_index_min"]
-RAW_MAX = artifact["raw_index_max"]
-CUTS = artifact["index_cuts"]                       # cut-off ตามเกณฑ์ SPST-20 บน index 0-100
+COL_MEANS = artifact["index_col_means"]
+COL_STDS = artifact["index_col_stds"]
+FEATURE_LABELS_TH = artifact["feature_labels_th"]
 
 LEVEL_INFO = {
     "low": {
@@ -57,15 +62,26 @@ LEVEL_INFO = {
         "description": "ความเครียดอยู่ในระดับสูงมาก แนะนำให้ปรึกษาผู้เชี่ยวชาญด้านสุขภาพจิตโดยเร็ว",
     },
 }
-LABELS = artifact["labels"]  # {0:"low",1:"medium",2:"high",3:"highest"}
 
 
-def compute_stress_index(row: pd.DataFrame) -> float:
-    """z-score ทุก feature -> composite index -> ปรับสเกล 0-100"""
-    z = (row[INDEX_COLS] - COL_MEANS) / COL_STDS
-    raw = z[POS_COLS].sum(axis=1) - z[NEG_COLS].sum(axis=1)
-    idx = (raw - RAW_MIN) / (RAW_MAX - RAW_MIN) * 100
-    return float(idx.clip(0, 100).iloc[0])
+def compute_ml_score(row: pd.DataFrame) -> float:
+    """predict_proba -> z-score composite (p_high - p_low) -> sigmoid 0-100"""
+    proba = MODEL.predict_proba(row)[0]          # [p_low, p_medium, p_high]
+    z_high = (proba[2] - MU_HIGH) / SD_HIGH
+    z_low = (proba[0] - MU_LOW) / SD_LOW
+    raw = z_high - z_low
+    return float(100 / (1 + np.exp(-raw)))
+
+
+def compute_top_factors(row: pd.DataFrame, n: int = 3) -> list[str]:
+    """จัดอันดับปัจจัยที่ 'ทำให้เครียดขึ้น' มากที่สุดเทียบกับค่าเฉลี่ยของกลุ่มตัวอย่าง"""
+    scores = {}
+    for col in POS_COLS + NEG_COLS:
+        sd = COL_STDS[col] or 1.0
+        z = (float(row[col].iloc[0]) - COL_MEANS[col]) / sd
+        scores[col] = z if col in POS_COLS else -z   # NEG: ค่าต่ำ = เครียดขึ้น
+    top = sorted(scores, key=scores.get, reverse=True)[:n]
+    return [FEATURE_LABELS_TH.get(c, c) for c in top if scores[c] > 0]
 
 
 @app.get("/")
@@ -78,32 +94,33 @@ def predict(payload: PredictRequest, db: Session = Depends(get_db)):
     # 1) เตรียม features ตามลำดับที่โมเดลต้องการ
     row = pd.DataFrame([{name: getattr(payload, name) for name in FEATURE_ORDER}])
 
-    # 2) คำนวณ composite index แล้วแบ่ง 4 ระดับด้วย cut-off ตามเกณฑ์ SPST-20
-    stress_index = compute_stress_index(row)
-    level_code = int(np.searchsorted(CUTS, stress_index, side="right"))  # 0-3
+    # 2) ml_score จากผลโมเดล แล้วแบ่ง 4 ระดับด้วย cut-off
+    ml_score = compute_ml_score(row)
+    level_code = int(np.searchsorted(CUTS, ml_score, side="right"))  # 0-3
     level_key = LABELS[level_code]
     info = LEVEL_INFO[level_key]
-    score = int(round(stress_index))  # 0-100 เก็บลง DB เท่านั้น ไม่ส่งกลับให้ผู้ใช้เห็น
+    score = int(round(ml_score))  # เก็บลง DB เท่านั้น ไม่ส่งกลับให้ผู้ใช้เห็น
 
-    # (ทางเลือก) ผลโมเดล 3 ระดับจาก label เดิม ไว้เทียบ/ดีบัก ไม่ได้ใช้กำหนดระดับที่แสดงผล
-    # model_level = int(artifact["model"].predict(row)[0])
+    # 3) ปัจจัยที่เกี่ยวข้องสูงสุด
+    factors = compute_top_factors(row)
 
-    # 3) บันทึกผลลง database — ไม่เก็บชื่อ/รหัสนิสิต/คณะ ใช้ respondent_code แทน
+    # 4) บันทึกผลลง database — ไม่เก็บชื่อ/รหัสนิสิต/คณะ ใช้ respondent_code แทน
     result = models.StressResult(
-        respondent_code="",  # ใส่ชั่วคราว จะอัปเดตด้านล่างหลังรู้ id จริง
+        respondent_code="",  # อัปเดตด้านล่างหลังรู้ id จริง
         score=score,
         level=level_key,
     )
     db.add(result)
-    db.flush()  # ให้ database gen id มาก่อน โดยยังไม่ commit
+    db.flush()
 
-    result.respondent_code = f"{result.id:05d}"  # คนแรก 00001, คนสอง 00002, ...
+    result.respondent_code = f"{result.id:05d}"
     db.commit()
 
-    # 4) ส่งกลับให้หน้าเว็บ — ไม่มี score ติดไปด้วย บอกแค่ระดับ
+    # 5) ส่งกลับให้หน้าเว็บ
     return PredictResponse(
         label=info["th"],
         level_key=level_key,
         color=info["color"],
         description=info["description"],
+        top_factors=factors,
     )

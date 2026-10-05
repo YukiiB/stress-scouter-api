@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 
 from database import engine, get_db, Base
 import models
-from schemas import PredictRequest, PredictResponse
+from schemas import PredictRequest, PredictResponse, FactorOut
+from advice import FACTOR_TIPS
 
 # สร้างตารางในฐานข้อมูลอัตโนมัติ (ถ้ายังไม่มี) ตอนแอปเริ่มทำงาน
 Base.metadata.create_all(bind=engine)
@@ -73,7 +74,7 @@ def compute_ml_score(row: pd.DataFrame) -> float:
     return float(100 / (1 + np.exp(-raw)))
 
 
-def compute_top_factors(row: pd.DataFrame, n: int = 3) -> list[str]:
+def compute_top_factors(row: pd.DataFrame, n: int = 3) -> list[FactorOut]:
     """จัดอันดับปัจจัยที่ 'ทำให้เครียดขึ้น' มากที่สุดเทียบกับค่าเฉลี่ยของกลุ่มตัวอย่าง"""
     scores = {}
     for col in POS_COLS + NEG_COLS:
@@ -81,7 +82,10 @@ def compute_top_factors(row: pd.DataFrame, n: int = 3) -> list[str]:
         z = (float(row[col].iloc[0]) - COL_MEANS[col]) / sd
         scores[col] = z if col in POS_COLS else -z   # NEG: ค่าต่ำ = เครียดขึ้น
     top = sorted(scores, key=scores.get, reverse=True)[:n]
-    return [FEATURE_LABELS_TH.get(c, c) for c in top if scores[c] > 0]
+    return [
+        FactorOut(label=FEATURE_LABELS_TH.get(c, c), tip=FACTOR_TIPS.get(c, ""))
+        for c in top if scores[c] > 0
+    ]
 
 
 @app.get("/")

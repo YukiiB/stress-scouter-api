@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stress Scouter - แบบประเมินความเครียด</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, "Noto Sans Thai", sans-serif;
+      background: #fff;
+      color: #000000;
+      line-height: 1.6;
+    }
+    .container { max-width: 760px; margin: 32px auto; padding: 16px; }
+    .card {
+      background: #fff;
+      border-radius: 18px;
+      padding: 28px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.08);
+    }
+    h1 { margin-top: 0; color: #77cccc; }
+    .subtitle { color: #5da8a8; margin-bottom: 8px; }
+    .question {
+      border-top: 1px solid #e6ebf0;
+      padding: 20px 0;
+    }
+    .question:first-of-type { border-top: 0; }
+    .question-title { font-weight: bold; margin-bottom: 12px; }
+    label.option {
+      display: block;
+      background: #f7f9fc;
+      border: 1px solid #dce5ee;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin: 8px 0;
+      cursor: pointer;
+    }
+    label.option:hover { background: #eef6fc; }
+    input[type="radio"] { margin-right: 8px; }
+    button {
+      width: 100%;
+      border: 0;
+      border-radius: 10px;
+      padding: 13px 18px;
+      font-size: 16px;
+      font-weight: bold;
+      color: white;
+      background: #1f78b4;
+      cursor: pointer;
+    }
+    button:hover { background: #185f8d; }
+    button:disabled { background: #9bb6c9; cursor: not-allowed; }
+    button:focus-visible, label:has(input:focus-visible) {
+      outline: 3px solid #9bd2f5;
+      outline-offset: 2px;
+    }
+    .error { color: #b42318; margin: 12px 0; font-weight: bold; }
+    .result {
+      display: none;
+      margin-top: 22px;
+      padding: 20px;
+      border-radius: 12px;
+      background: #f7f9fc;
+      border: 1px solid #dce5ee;
+    }
+    .result-title { margin: 0 0 8px; font-size: 20px; }
+    .factors { display: none; margin-top: 14px; }
+    .factors h3 { margin: 0 0 6px; font-size: 16px; }
+    .factors ol { margin: 0; padding-left: 22px; }
+    .factors li { margin-bottom: 10px; }
+    .tip { font-size: 14px; color: #334; margin-top: 2px; }
+    .small { font-size: 13px; color: #667788; }
+    .disclaimer {
+      margin-top: 18px;
+      padding: 12px 14px;
+      background: #fff8e1;
+      border: 1px solid #ffe082;
+      border-radius: 10px;
+      font-size: 13px;
+      color: #6b5900;
+    }
+    @media (max-width: 520px) {
+      .container { margin: 12px auto; padding: 8px; }
+      .card { padding: 20px; }
+      h1 { font-size: 25px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <section class="card">
+      <h1>🧭 Stress Scouter</h1>
+      <p class="subtitle">แบบประเมินระดับความเครียดเบื้องต้นสำหรับนักศึกษา (20 ข้อ) วิเคราะห์ผลด้วย AI</p>
+
+      <form id="stressForm">
+
+        <div class="question">
+          <div class="question-title">1. คุณเคยมีอาการวิตกกังวลหรือไม่</div>
+          <label class="option"><input type="radio" name="anxiety_level" value="0" id="anxiety_level_0"> ไม่เคยมีความกังวลเลย</label>
+          <label class="option"><input type="radio" name="anxiety_level" value="7" id="anxiety_level_1"> กังวลเล็กน้อยเป็นบางครั้ง</label>
+          <label class="option"><input type="radio" name="anxiety_level" value="14" id="anxiety_level_2"> กังวลค่อนข้างบ่อย / เริ่มรู้สึกกระวนกระวาย</label>
+          <label class="option"><input type="radio" name="anxiety_level" value="21" id="anxiety_level_3"> กังวลตลอดเวลา / ตื่นตระหนกบ่อย</label>
+        </div>
+
+        <div class="question">
+          <div class="question-title">2. คุณความพึงพอใจกับสิ่งที่คุณมีอยู่ตอนนี้ไหม ?</div>
+          <label class="option"><input type="radio" name="self_esteem" value="30" id="self_esteem_0"> พึงพอใจและเห็นคุณค่าในตัวเองมาก</label>
+          <label class="option"><input type="radio" name="self_esteem" value="20" id="self_esteem_1"> มั่นใจในตัวเองระดับปานกลาง</label>
+          <label class="option"><input type="radio" name="self_esteem" value="10" id="self_esteem_2"> รู้สึกไม่ค่อยมั่นใจในตัวเอง</label>
+          <label class="option"><input type="radio" name="self_esteem" value="0" id="self_esteem_3"> ไม่เลย</label>
+        </div>
+
+        <div class="question">
+          <div class="question-title">3. คุณมีประวัติปัญหาสุขภาพจิต</div>
+          <label class="option"><input type="radio" name="mental_health_history" value="0" id="mental_health_history_0"> ไม่เคยมีประวัติการรักษา / วินิจฉัย</label>
+          <label class="option"><input type="radio" name="mental_health_history" value="1" id="mental_health_history_1"> เคยมีประวัติหรือได้รับการวินิจฉัย</label>
+        </div>
+
+        <div class="question">
+          <div class="question-title">4. คุณรู้เศร้าเหรือดิ่งในบางเวลาหรือไม่?</div>
+          <label class="option"><input type="radio" name="depression" value="0" id="depression_0"> อารมณ์แจ่มใสดี ไม่ดิ่งเลย</label>
+          <label class="option"><input type="radio" name="depression" value="9" id="depression_1"> เศร้าเล็กน้อยนาน ๆ ครั้ง</label>
+          <label class="option"><input type="radio" name="depression" value="18" id="depression_2"> เศร้าบ่อยครั้ง</label>
+          <label class="option"><input type="radio" name="depression" value="27" id="depression_3"> เศร้ามาก / หมดหวังในชีวิต</label>
+        </div>
+
+        <div class="question">
+          <div class="question-title">5. คุณมีอาการปวดศีรษะหรือไมเกรนบ่อยแค่ไหน?</div>
+          <label class="option"><input type="radio" name="headache" value="0" id="headache_0"> ไม่เคยมีอาการ</label>
+          <label class="option"><input type="radio" name="headache" value="1" id="headache_1"> นาน ๆ ครั้ง</label>
+          <label class="option"><input type="radio" name="headache" value="2" id="headache_2"> บางครั้ง</label>
+          <label class="option"><input type="radio" name="headache" value="3" id="headache_3"> บ่อยครั้ง</label>
+          <label class="option"><input type="radio" name="headache" value="4" id="headache_4"> บ่อยมาก</label>
+          <label class="option"><input type="radio" name="headache" value="5" id="headache_5"> เป็นเกือบทุกวัน</label>
+        </div>
+
+        <div class="question">
+          <div class="question-title">6. ระดับความดันโลหิตของคุณเป็นอย่างไร ? </div>
+          <label class="option"><input type="radio" name="blood_pressure" value="1" id="blood_pressure_0"> ปกติ</label>
+          <label class="option"><input type="radio" name="blood_pressure" value="2" id="blood_pressure_1"> ค่อนข้างสูง</label>
+          <label class="option"><input type="radio" name="blood_pressure" value="3" id="blood_pressure_2"> สูงมาก / ตึงบริเวณท้ายทอยบ่อย</label>
+        </div>
+
+        <div class="question">
+          <div class="question-title">7. คุณภาพการนอนของคุณในช่วงที่ผ่านมาเป็นอย่างไรบ้าง?</div>
+          <label class="option"><input type="radio" name="sleep_quality" value="5" id="sleep_quality_0"> ดีเยี่ยม (หลับสนิท ตื่นมาสดชื่น)</label>
+          <label class="option"><input type="radio" name="sleep_quality" value="4" id="sleep_quality_1"> ดี</label>
+          <label class="option"><input type="radio" name="sleep_quality" value="3" id="sleep_quality_2"> ปานกลาง</label>
+          <label class="option"><input type="radio" name="sleep_quality" value="2" id="sleep_quality_3"> ค่อนข้างแย่ (ตื่นกลางดึกบ่อย)</label>
+          <label class="option"><input type="radio" name="sleep_quality" value="1" id="sleep_quality_4"> แย่มาก</label>
+          <label class="option"><input type="radio" name="sleep_quality" value="0" id="sleep_quality_5"> นอนไม่หลับเลย</label>
+        </div>
+
+        <div class="question">
+          <div class="question-title">8. คุณมีปัญหาเกี่ยวกับระบบการหายใจหรือไม่?</div>
+          <label class="option"><input type="radio" name="breathing_problem" value="0" id="breathing_problem_0"> ไม่มีปัญหา หายใจสะดวกดี</label>
+          <label class="option"><input type="radio" name="breathing_problem" value="1" id="breathing_problem_1"> นาน ๆ ครั้ง</label>
+          <label class="option"><input type="radio" name="breathing_problem" value="2" id="breathing_problem_2"> บางครั้ง</label>
+          <label class="option"><input type="radio" name="breathing_problem" value="3" id="breathing_problem_3"> แน่นหน้าอก / หายใจติดขัดบางครั้ง</label>
+          <label class="option"><input type="radio" name="breathing_problem" value="4" id="breathing_problem_4"> เป็นบ่อยครั้ง</label>
+          <label class="option"><input type="radio" name="breathing_problem" value="5" id="breathing_problem_5"> มีอาการหนัก</label>
+        </div>
+
+        <div class="question">
+          <div class="question-title">9. บริเวณที่อยู่อาศัยของคุณมีมลภาวะทางเสียงหรือไม่?</div>
+          <label class="option"><input type="radio" name="noise_level" value="0" id="noise_level_0"> เงียบสงบดี</label>
+          <label class="option"><input type="radio" name="noise_level" value="1" id="noise_level_1"> มีเสียงดังเล็กน้อย</label>
+          <label class="option"><input type="radio" name="noise_level" value="2" id="noise_level_2"> มีเสียงปานกลางพอรับได้</label>
+          <label class="option"><input type="radio" name="noise_level" value="3" id="noise_level_3"> ค่อนข้างดัง</label>
+          <label class="option"><input type="radio" name="noise_level" value="4" id="noise_level_4"> เสียงดังมาก</label>
+          <label class="option"><input type="radio" name="noise_level" value="5" id="noise_level_5"> รบกวนสมาธิและการนอนตลอดเวลา</label>
+        </div>
+
+        <div class="question">
+          <div class="question-title">10. สภาพความเป็นอยู่และสภาพแวดล้อมในที่พักของคุณเป็นอย่างไร?</div>
+          <label class="option"><input type="radio" name="living_conditions" value="5" id="living_conditions_0"> ดีเยี่ยม</label>
+          <label class="option"><input type="radio" name="living_conditions" value="4" id="living_conditions_1"> ดี</label>
+          <label class="option"><input type="radio" name="living_conditions" value="3" id="living_conditions_2"> ปานกลาง</label>
+          <label class="option"><input type="radio" name="living_conditions" value="2" id="living_conditions_3"> ค่อนข้างคับแคบ อึดอัด</label>
+          <label class="option"><input type="radio" name="living_conditions" value="1" id="living_conditions_4"> ค่อนข้างแย่</label>
+          <label class="option"><input type="radio" name="living_conditions" value="0" id="living_conditions_5"> แออัด ทรุดโทรมมาก</label>
+        </div>
+
+        <div class="question">
+          <div class="question-title">11. ความรู้สึกปลอดภัยในชีวิตประจำวันของคุณอยู่ในตัวเลือกใด ? </div>
+          <label class="option"><input type="radio" name="safety" value="5" id="safety_0"> รู้สึกปลอดภัยสุด ๆ</label>
+          <label class="option"><input type="radio" name="safety" value="4" id="safety_1"> ปลอดภัยมากแต่ไม่ถึงกับมากที่สุด</label>
+          <label class="option"><input type="radio" name="safety" value="3" id="safety_2"> ปลอดภัยดี</label>
+          <label class="option"><input type="radio" name="safety" value="2" id="safety_3"> ปานกลาง</label>
+          <label class="option"><input type="radio" name="safety" value="1" id="safety_4"> ไม่ค่อยปลอดภัย</label>
+          <label class="option"><input type="radio" name="safety" value="0" id="safety_5"> รู้สึกระแวงตลอด / ไม่ปลอดภัยเลย</label>
+        </div>
+
+        <div class="question">
+          <div class="question-title">12. คุณได้รับปัจจัย 4 ครบหรือไม่ ? (อาหาร ที่อยู่อาศัย เครื่องนุ่งห่ม และยารักษาโรค)</div>
+          <label class="option"><input type="radio" name="basic_needs" value="5" id="basic_needs_0"> สมบูรณ์แบบ ไม่ขาดอะไร (พอใช้ในระยะยาว)</label>
+          <label class="option"><input type="radio" name="basic_needs" value="4" id="basic_needs_1"> เพียงพอมาก</label>
+          <label class="option"><input type="radio" name="basic_needs" value="3" id="basic_needs_2"> เพียงพอตามมาตรฐาน</label>
+          <label class="option"><input type="radio" name="basic_needs" value="2" id="basic_needs_3"> พอใช้</label>
+          <label class="option"><input type="radio" name="basic_needs" value="1" id="basic_needs_4"> ขาดบางอย่าง</label>
+          <label class="option"><input type="radio" name="basic_needs" value="0" id="basic_needs_5"> ขาดแคลนอย่างมาก</label>
+        </div>
+
+        <div class="question">
+          <div class="question-title">13. ประสิทธิภาพและความพึงพอใจต่อการเรียนของคุณ</div>
+          <label class="option"><input type="radio" name="academic_performance" value="5" id="academic_performance_0"> พึงพอใจมากที่สุด ทำได้ดีตามเป้า</label>
+          <label class="option"><input type="radio" name="academic_performance" value="4" id="academic_performance_1"> พึงพอใจมาก</label>
+          <label class="option"><input type="radio" name="academic_performance" value="3" id="academic_performance_2"> ปานกลาง</label>
+          <label class="option"><input type="radio" name="academic_performance" value="2" id="academic_performance_3"> ค่อนข้างต่ำกว่าที่คิด</label>
+          <label class="option"><input type="radio" name="academic_performance" value="1" id="academic_performance_4"> ไม่ค่อยดี</label>
+          <label class="option"><input type="radio" name="academic_performance" value="0" id="academic_performance_5"> ไม่ดีเลย </label>
+        </div>
+
+        <div class="question">
+          <div class="question-title">14. คุณมีภาระการเรียน งาน และการบ้านระดับใด ?</div>
+          <label class="option"><input type="radio" name="study_load" value="0" id="study_load_0"> เบามาก สบาย ๆ</label>
+          <label class="option"><input type="radio" name="study_load" value="1" id="study_load_1"> เล็กน้อย</label>
+          <label class="option"><input type="radio" name="study_load" value="2" id="study_load_2"> ปานกลาง</label>
+          <label class="option"><input type="radio" name="study_load" value="3" id="study_load_3"> ค่อนข้างหนัก</label>
+          <label class="option"><input type="radio" name="study_load" value="4" id="study_load_4"> หนักมาก</label>
+          <label class="option"><input type="radio" name="study_load" value="5" id="study_load_5"> หนักเกินไป / ทำไม่ทัน</label>
+        </div>
+
+        <div class="question">
+          <div class="question-title">15. คุณและอาจารย์มีความสัมพันธ์ที่ดีไหม ?</div>
+          <label class="option"><input type="radio" name="teacher_student_relationship" value="5" id="teacher_student_relationship_0"> ปกติดีมาก ปรึกษาได้ตลอด</label>
+          <label class="option"><input type="radio" name="teacher_student_relationship" value="4" id="teacher_student_relationship_1"> ค่อนข้างดี </label>
+          <label class="option"><input type="radio" name="teacher_student_relationship" value="3" id="teacher_student_relationship_2"> ปานกลาง ปกติทั่วไป</label>
+          <label class="option"><input type="radio" name="teacher_student_relationship" value="2" id="teacher_student_relationship_3"> ไม่ค่อยสนิท / เกร็งๆ</label>
+          <label class="option"><input type="radio" name="teacher_student_relationship" value="1" id="teacher_student_relationship_4"> อึดอัดเวลาต้องคุย</label>
+          <label class="option"><input type="radio" name="teacher_student_relationship" value="0" id="teacher_student_relationship_5"> ตึงเครียด</label>
+        </div>
+
+        <div class="question">
+          <div class="question-title">16. ความกังวลเกี่ยวกับอนาคตหรือการทำงาน</div>
+          <label class="option"><input type="radio" name="future_career_concerns" value="0" id="future_career_concerns_0"> ไม่กังวลเลย</label>
+          <label class="option"><input type="radio" name="future_career_concerns" value="1" id="future_career_concerns_1"> กังวลเล็กน้อย</label>
+          <label class="option"><input type="radio" name="future_career_concerns" value="2" id="future_career_concerns_2"> ปานกลาง</label>
+          <label class="option"><input type="radio" name="future_career_concerns" value="3" id="future_career_concerns_3"> กังวลค่อนข้างบ่อย</label>
+          <label class="option"><input type="radio" name="future_career_concerns" value="4" id="future_career_concerns_4"> กังวลมาก</label>
+          <label class="option"><input type="radio" name="future_career_concerns" value="5" id="future_career_concerns_5"> กังวลรุนแรงจนนอนไม่หลับ/เครียด</label>
+        </div>
+
+        <div class="question">
+          <div class="question-title">17. คุณได้รับการสนับสนุนและที่พึ่งจากคนรอบข้างหรือไม่ ?</div>
+          <label class="option"><input type="radio" name="social_support" value="3" id="social_support_0"> มีครอบครัว/เพื่อนพร้อมช่วยเหลือเสมอ</label>
+          <label class="option"><input type="radio" name="social_support" value="2" id="social_support_1"> มีการได้รับการช่วยเหลือบ้างบางเวลา</label>
+          <label class="option"><input type="radio" name="social_support" value="1" id="social_support_2"> มีน้อยมาก ไม่ค่อยกล้าพึ่งพาใคร</label>
+          <label class="option"><input type="radio" name="social_support" value="0" id="social_support_3"> ไม่มีใครเลย</label>
+        </div>
+
+        <div class="question">
+          <div class="question-title">18. คุณรู้สึกถึงแรงกดดันจากการเปรียบเทียบกับเพื่อน/สังคมหรือไม่ ?</div>
+          <label class="option"><input type="radio" name="peer_pressure" value="0" id="peer_pressure_0"> ไม่รู้สึกกดดันเลย</label>
+          <label class="option"><input type="radio" name="peer_pressure" value="1" id="peer_pressure_1"> กดดันเล็กน้อย</label>
+          <label class="option"><input type="radio" name="peer_pressure" value="2" id="peer_pressure_2"> ปานกลาง</label>
+          <label class="option"><input type="radio" name="peer_pressure" value="3" id="peer_pressure_3"> ค่อนข้างกดดัน</label>
+          <label class="option"><input type="radio" name="peer_pressure" value="4" id="peer_pressure_4"> กดดันมาก</label>
+          <label class="option"><input type="radio" name="peer_pressure" value="5" id="peer_pressure_5"> รู้สึกถูกกดดันรุนแรงตลอดเวลา</label>
+        </div>
+
+        <div class="question">
+          <div class="question-title">19. คุณมีความเหนื่อยล้าจากกิจกรรมนอกหลักสูตร/ชมรมหรือไม่ ?</div>
+          <label class="option"><input type="radio" name="extracurricular_activities" value="0" id="extracurricular_activities_0"> ไม่ได้ทำ / ไม่เหนื่อยเลย</label>
+          <label class="option"><input type="radio" name="extracurricular_activities" value="1" id="extracurricular_activities_1"> เหนื่อยเล็กน้อย</label>
+          <label class="option"><input type="radio" name="extracurricular_activities" value="2" id="extracurricular_activities_2"> ปานกลาง</label>
+          <label class="option"><input type="radio" name="extracurricular_activities" value="3" id="extracurricular_activities_3"> ค่อนข้างเหนื่อย</label>
+          <label class="option"><input type="radio" name="extracurricular_activities" value="4" id="extracurricular_activities_4"> เหนื่อยมาก</label>
+          <label class="option"><input type="radio" name="extracurricular_activities" value="5" id="extracurricular_activities_5"> กิจกรรมหนักเกินไปจนส่งผลเสีย</label>
+        </div>
+
+        <div class="question">
+          <div class="question-title">20. คุณมีประสบการณ์การถูกกลั่นแกล้ง(Bullying) หรือไม่ ?</div>
+          <label class="option"><input type="radio" name="bullying" value="0" id="bullying_0"> ไม่เคยเลย</label>
+          <label class="option"><input type="radio" name="bullying" value="1" id="bullying_1"> นาน ๆ ครั้ง</label>
+          <label class="option"><input type="radio" name="bullying" value="2" id="bullying_2"> บางครั้ง</label>
+          <label class="option"><input type="radio" name="bullying" value="3" id="bullying_3"> บ่อยครั้ง</label>
+          <label class="option"><input type="radio" name="bullying" value="4" id="bullying_4"> โดนเป็นประจำ</label>
+          <label class="option"><input type="radio" name="bullying" value="5" id="bullying_5"> โดนกลั่นแกล้งอย่างหนัก รุนแรง</label>
+        </div>
+
+        <p id="error" class="error" role="alert"></p>
+        <button type="submit" id="submitBtn">ดูผลลัพท์</button>
+      </form>
+
+      <section id="result" class="result" aria-live="polite">
+        <h2 class="result-title" id="resultTitle">ผลการประเมิน</h2>
+        <p id="descText"></p>
+        <div id="factorsBox" class="factors">
+          <h3>ปัจจัยที่เกี่ยวข้องสูงสุด และคำแนะนำเบื้องต้น</h3>
+          <ol id="factorsList"></ol>
+        </div>
+        <p class="small">*ผลนี้เป็นผลจากการประเมินเบื้องต้นไม่ใช่การวินิจฉัยทางการแพทย์</p>
+      </section>
+
+      <div class="disclaimer">
+        ⚠️ หากคุณรู้สึกเครียดสะสม หมดหวัง หรือมีความคิดทำร้ายตัวเอง กรุณาปรึกษาผู้เชี่ยวชาญโดยตรง
+        เช่น สายด่วนสุขภาพจิต กรมสุขภาพจิต โทร. 1323 (ฟรีตลอด 24 ชม.)
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // ต้องเรียงลำดับให้ตรงกับ FEATURE_ORDER ฝั่ง backend (main.py / model.pkl)
+    const FIELD_IDS = ["anxiety_level", "self_esteem", "mental_health_history", "depression", "headache", "blood_pressure", "sleep_quality", "breathing_problem", "noise_level", "living_conditions", "safety", "basic_needs", "academic_performance", "study_load", "teacher_student_relationship", "future_career_concerns", "social_support", "peer_pressure", "extracurricular_activities", "bullying"];
+
+    // ใส่ URL ของ backend (FastAPI) ที่ deploy แล้ว เช่น https://your-app.onrender.com/predict
+    const API_URL = "https://stress-scouter-api.onrender.com/predict";
+
+    const form = document.getElementById('stressForm');
+    const error = document.getElementById('error');
+    const result = document.getElementById('result');
+    const resultTitle = document.getElementById('resultTitle');
+    const descText = document.getElementById('descText');
+    const factorsBox = document.getElementById('factorsBox');
+    const factorsList = document.getElementById('factorsList');
+    const submitBtn = document.getElementById('submitBtn');
+
+
+    form.addEventListener('submit', async function (event) {
+      event.preventDefault();
+      error.textContent = '';
+      result.style.display = 'none';
+
+      const payload = {};
+      for (const name of FIELD_IDS) {
+        const selected = form.querySelector(`input[name="${name}"]:checked`);
+        if (!selected) {
+          error.textContent = 'กรุณาตอบคำถามให้ครบทุกข้อก่อนวิเคราะห์ผล';
+          selected?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          return;
+        }
+        payload[name] = Number(selected.value);
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'กำลังวิเคราะห์...';
+
+      try {
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) throw new Error('server error');
+        const data = await response.json();
+
+        resultTitle.textContent = `ผลการประเมิน: ${data.label}`;
+        resultTitle.style.color = data.color;
+        descText.textContent = data.description;
+
+        // ปัจจัยที่เกี่ยวข้องสูงสุด
+        const factors = data.top_factors || [];
+        factorsList.innerHTML = '';
+        factors.forEach(f => {
+          const li = document.createElement('li');
+          const name = document.createElement('strong');
+          name.textContent = typeof f === 'string' ? f : f.label;
+          li.appendChild(name);
+          if (f.tip) {
+            const tip = document.createElement('div');
+            tip.className = 'tip';
+            tip.textContent = f.tip;
+            li.appendChild(tip);
+          }
+          factorsList.appendChild(li);
+        });
+        factorsBox.style.display = factors.length ? 'block' : 'none';
+
+        result.style.display = 'block';
+        result.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (err) {
+        error.textContent = 'เกิดข้อผิดพลาดในการเชื่อมต่อกับ Server กรุณาลองใหม่อีกครั้ง';
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'วิเคราะห์ผล';
+      }
+    });
+  </script>
+</body>
+</html>

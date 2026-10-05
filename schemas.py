@@ -1,3 +1,5 @@
+from typing import List
+
 from pydantic import BaseModel
 
 
@@ -25,9 +27,15 @@ class PredictRequest(BaseModel):
     bullying: float
 
 
+class FactorOut(BaseModel):
+    label: str   # ชื่อปัจจัยภาษาไทย
+    tip: str     # คำแนะนำเบื้องต้นของปัจจัยนั้น
+
+
 class PredictResponse(BaseModel):
     # ไม่ส่งคะแนน (score) กลับไปให้ผู้ตอบแบบสอบถามเห็น บอกแค่ระดับ
     label: str          # ข้อความภาษาไทย เช่น "ความเครียดสูง"
     level_key: str       # low / medium / high / highest
     color: str
     description: str
+    top_factors: List[FactorOut] = []   # ปัจจัยที่เกี่ยวข้องสูงสุด พร้อมคำแนะนำ
